@@ -20,6 +20,8 @@ model Product {
   // 供应商：MANUAL = 自己发货/手动采购（1688 等），CJ = CJdropshipping 代发
   supplier    String    @default("MANUAL")
   supplierRef String? // CJ 的 pid
+  tags        String    @default("[]") // JSON 数组，如 ["kit","trip:business"]，用于首页分组
+  highlights  String    @default("[]") // JSON 数组，商品页的卖点列表
   variants    Variant[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -35,6 +37,8 @@ model Variant {
   costCents   Int? // 采购成本（CJ 导入时自动带上）
   shippingCostCents Int? // 预估运费成本：全站包邮，运费由我们承担并计入售价
   supplierRef String? // CJ 的 vid
+  // 套装：一个规格对应多个 CJ 商品，JSON [{ vid, quantity, name }]；有值时忽略 supplierRef
+  components  String?
   image       String?
   orderItems  OrderItem[]
 }

@@ -22,52 +22,116 @@ export async function dispatchFulfillments(orderId: number) {
   await db.order.update({ where: { id: orderId }, data: { status: "FULFILLING" } });
 }
 
-// 把履约单推送到 CJ 下单，CJ 会从它的仓库直接发给买家
+type CJLine = { vid: string; quantity: number };
+type ItemWithVariant = { id: string; title: string; quantity: number; variant: { supplierRef: string | null; components: string | null } };
+
+// 订单行 → CJ 商品行：套装展开成多个 CJ 商品，数量相乘
+function cjLinesFor(item: ItemWithVariant): CJLine[] {
+  if (item.variant.components) {
+    const parts = JSON.parse(item.variant.components) as CJLine[];
+    return parts.map((p) => ({ vid: p.vid, quantity: p.quantity * item.quantity }));
+  }
+  if (!item.variant.supplierRef) throw new Error(`商品「${item.title}」没有关联 CJ vid`);
+  return [{ vid: item.variant.supplierRef, quantity: item.quantity }];
+}
+
+function mergeLines(lines: CJLine[]) {
+  const map = new Map<string, number>();
+  for (const l of lines) map.set(l.vid, (map.get(l.vid) ?? 0) + l.quantity);
+  return [...map].map(([vid, quantity]) => ({ vid, quantity }));
+}
+
+async function pickLogistic(country: string, zip: string, products: CJLine[]) {
+  const options = await cj.calculateFreight({ endCountryCode: country, zip, products });
+  if (config.cj.logisticName) return options.find((o) => o.logisticName === config.cj.logisticName) ?? null;
+  return options.toSorted((a, b) => a.logisticPrice - b.logisticPrice)[0] ?? null;
+}
+
+// 不同仓库的商品没有共同物流线路（如供应商直发 + CJ 仓）：贪心分组，能合并的放一个包裹
+export async function groupByRoute<T extends ItemWithVariant>(items: T[], country: string, zip: string) {
+  const groups: { items: T[]; lines: CJLine[]; logisticName: string }[] = [];
+  for (const item of items) {
+    const lines = cjLinesFor(item);
+    let placed = false;
+    for (const g of groups) {
+      const merged = mergeLines([...g.lines, ...lines]);
+      const route = await pickLogistic(country, zip, merged);
+      if (route) {
+        g.items.push(item);
+        g.lines = merged;
+        g.logisticName = route.logisticName;
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      const merged = mergeLines(lines);
+      const route = await pickLogistic(country, zip, merged);
+      if (!route) throw new Error(`「${item.title}」没有可发往 ${country} 的 CJ 物流线路`);
+      groups.push({ items: [item], lines: merged, logisticName: route.logisticName });
+    }
+  }
+  return groups;
+}
+
+// 把履约单推送到 CJ 下单，CJ 会从它的仓库直接发给买家；无法合并发货时自动拆成多个包裹
 export async function placeCJOrder(fulfillmentId: string) {
   const f = await db.fulfillment.findUniqueOrThrow({
     where: { id: fulfillmentId },
     include: { order: true, items: { include: { variant: true } } },
   });
   const o = f.order;
+  let groups: Awaited<ReturnType<typeof groupByRoute<(typeof f.items)[number]>>>;
   try {
-    const products = f.items.map((i) => {
-      if (!i.variant.supplierRef) throw new Error(`商品「${i.title}」没有关联 CJ vid`);
-      return { vid: i.variant.supplierRef, quantity: i.quantity };
-    });
-
-    let logisticName = config.cj.logisticName;
-    if (!logisticName) {
-      const options = await cj.calculateFreight({ endCountryCode: o.shipCountry, zip: o.shipZip, products });
-      if (!options.length) throw new Error(`CJ 没有可发往 ${o.shipCountry} 的物流`);
-      logisticName = options.toSorted((a, b) => a.logisticPrice - b.logisticPrice)[0].logisticName;
-    }
-
-    const res = await cj.createOrder({
-      orderNumber: `${o.id}-${f.id.slice(-6)}`,
-      shippingCountryCode: o.shipCountry,
-      shippingCountry: countryName(o.shipCountry),
-      shippingProvince: o.shipState || o.shipCity,
-      shippingCity: o.shipCity,
-      shippingCustomerName: o.shipName,
-      shippingAddress: o.shipLine1,
-      shippingAddress2: o.shipLine2 || undefined,
-      shippingZip: o.shipZip,
-      shippingPhone: o.shipPhone || undefined,
-      logisticName,
-      fromCountryCode: config.cj.fromCountryCode,
-      products,
-    });
-
-    await db.fulfillment.update({
-      where: { id: f.id },
-      data: { status: "PLACED", supplierOrderId: res.orderId, logisticName, error: null },
-    });
-    await addEvent(o.id, "CJ_PLACED", `已在 CJ 下单 ${res.orderId}（物流：${logisticName}），请到 CJ 后台付款`);
+    groups = await groupByRoute(f.items, o.shipCountry, o.shipZip);
   } catch (e) {
-    const error = e instanceof Error ? e.message : String(e);
-    await db.fulfillment.update({ where: { id: f.id }, data: { status: "FAILED", error } });
-    await addEvent(o.id, "CJ_FAILED", `CJ 下单失败：${error}`);
+    return failFulfillment(f.id, o.id, e);
   }
+
+  // 第一组留在当前履约单，其余各建一个新履约单
+  const targets = [{ id: f.id, group: groups[0] }];
+  for (const group of groups.slice(1)) {
+    const extra = await db.fulfillment.create({
+      data: { orderId: o.id, supplier: "CJ", items: { connect: group.items.map((i) => ({ id: i.id })) } },
+    });
+    targets.push({ id: extra.id, group });
+  }
+  if (groups.length > 1) {
+    await addEvent(o.id, "CJ_SPLIT", `商品来自不同仓库，无法合并发货，拆分为 ${groups.length} 个 CJ 包裹`);
+  }
+
+  for (const { id, group } of targets) {
+    try {
+      const res = await cj.createOrder({
+        orderNumber: `${o.id}-${id.slice(-6)}`,
+        shippingCountryCode: o.shipCountry,
+        shippingCountry: countryName(o.shipCountry),
+        shippingProvince: o.shipState || o.shipCity,
+        shippingCity: o.shipCity,
+        shippingCustomerName: o.shipName,
+        shippingAddress: o.shipLine1,
+        shippingAddress2: o.shipLine2 || undefined,
+        shippingZip: o.shipZip,
+        shippingPhone: o.shipPhone || undefined,
+        logisticName: group.logisticName,
+        fromCountryCode: config.cj.fromCountryCode,
+        products: group.lines,
+      });
+      await db.fulfillment.update({
+        where: { id },
+        data: { status: "PLACED", supplierOrderId: res.orderId, logisticName: group.logisticName, error: null },
+      });
+      await addEvent(o.id, "CJ_PLACED", `已在 CJ 下单 ${res.orderId}（物流：${group.logisticName}），请到 CJ 后台付款`);
+    } catch (e) {
+      await failFulfillment(id, o.id, e);
+    }
+  }
+}
+
+async function failFulfillment(fulfillmentId: string, orderId: number, e: unknown) {
+  const error = e instanceof Error ? e.message : String(e);
+  await db.fulfillment.update({ where: { id: fulfillmentId }, data: { status: "FAILED", error } });
+  await addEvent(orderId, "CJ_FAILED", `CJ 下单失败：${error}`);
 }
 
 // 向 CJ 查询物流单号，有了就标记发货
