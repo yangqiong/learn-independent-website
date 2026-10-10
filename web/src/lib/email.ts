@@ -29,20 +29,24 @@ type MailOrder = {
   items: { title: string; variantName: string; quantity: number; unitCents: number }[];
 };
 
+// 买家输入（姓名、运单号等）进入邮件 HTML 前必须转义
+const esc = (s: string | null | undefined) =>
+  (s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+
 const orderUrl = (o: { id: number; token: string }) => `${config.baseUrl}/orders/${o.id}?token=${o.token}`;
 
 const layout = (body: string) =>
   `<div style="font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:560px;margin:auto;color:#111">
-    <h2 style="margin-bottom:4px">${config.siteName}</h2>${body}</div>`;
+    <h2 style="margin-bottom:4px">${esc(config.siteName)}</h2>${body}</div>`;
 
 export function sendOrderConfirmation(order: MailOrder) {
   const rows = order.items
-    .map((i) => `<li>${i.title} (${i.variantName}) × ${i.quantity} — ${formatMoney(i.unitCents * i.quantity, order.currency)}</li>`)
+    .map((i) => `<li>${esc(i.title)} (${esc(i.variantName)}) × ${i.quantity} — ${formatMoney(i.unitCents * i.quantity, order.currency)}</li>`)
     .join("");
   return sendEmail(
     order.email,
     `Order #${order.id} confirmed`,
-    layout(`<p>Hi ${order.shipName}, thanks for your order! We'll email you again when it ships.</p>
+    layout(`<p>Hi ${esc(order.shipName)}, thanks for your order! We'll email you again when it ships.</p>
       <ul>${rows}</ul><p><b>Total: ${formatMoney(order.totalCents, order.currency)}</b></p>
       <p><a href="${orderUrl(order)}">View your order</a></p>`),
   );
@@ -55,9 +59,9 @@ export function sendShippedNotice(
   return sendEmail(
     order.email,
     `Order #${order.id} has shipped`,
-    layout(`<p>Hi ${order.shipName}, good news — part or all of your order is on its way.</p>
-      <p>Carrier: ${shipment.carrier ?? "-"}<br/>Tracking number: <b>${shipment.trackingNumber}</b></p>
-      ${shipment.trackingUrl ? `<p><a href="${shipment.trackingUrl}">Track your package</a></p>` : ""}
+    layout(`<p>Hi ${esc(order.shipName)}, good news — part or all of your order is on its way.</p>
+      <p>Carrier: ${esc(shipment.carrier) || "-"}<br/>Tracking number: <b>${esc(shipment.trackingNumber)}</b></p>
+      ${shipment.trackingUrl ? `<p><a href="${esc(shipment.trackingUrl)}">Track your package</a></p>` : ""}
       <p><a href="${orderUrl(order)}">View your order</a></p>`),
   );
 }
@@ -66,7 +70,7 @@ export function sendRefundNotice(order: MailOrder) {
   return sendEmail(
     order.email,
     `Order #${order.id} refunded`,
-    layout(`<p>Hi ${order.shipName}, your order has been refunded (${formatMoney(order.totalCents, order.currency)}).
+    layout(`<p>Hi ${esc(order.shipName)}, your order has been refunded (${formatMoney(order.totalCents, order.currency)}).
       It may take a few days to appear on your statement.</p>`),
   );
 }
