@@ -87,6 +87,7 @@ export type CJProduct = {
     variantSku: string;
     variantImage: string | null;
     variantSellPrice: number;
+    variantWeight?: number; // 克
   }[];
 };
 

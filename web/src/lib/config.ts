@@ -7,8 +7,12 @@ export const config = {
   siteName: env.SITE_NAME ?? "Demo Store",
   baseUrl: env.BASE_URL ?? "http://localhost:3000",
   currency: "USD",
-  shippingFlatCents: Number(env.SHIPPING_FLAT_CENTS ?? 499),
-  freeShippingOverCents: Number(env.FREE_SHIPPING_OVER_CENTS ?? 5000),
+  // 默认全站包邮：运费在导入定价时已计入售价。想收运费可设 SHIPPING_FLAT_CENTS
+  shippingFlatCents: Number(env.SHIPPING_FLAT_CENTS ?? 0),
+  freeShippingOverCents: Number(env.FREE_SHIPPING_OVER_CENTS ?? 0),
+  // 用于估算毛利的支付手续费（PayPal 跨境收款大致 4.4% + $0.30，以你的账户实际费率为准）
+  paymentFeePercent: Number(env.PAYMENT_FEE_PERCENT ?? 4.4),
+  paymentFeeFixedCents: Number(env.PAYMENT_FEE_FIXED_CENTS ?? 30),
 
   // paypal：走 PayPal（沙箱/正式）；mock：本地模拟支付，仅在未配置 PayPal 时可用
   paymentProvider: (env.PAYMENT_PROVIDER ?? (paypalConfigured ? "paypal" : "mock")) as "paypal" | "mock",
@@ -26,8 +30,9 @@ export const config = {
     // 留空则按运费试算结果自动选最便宜的物流
     logisticName: env.CJ_LOGISTIC_NAME ?? "",
     fromCountryCode: env.CJ_FROM_COUNTRY ?? "CN",
-    // 导入商品时的默认加价倍数：售价 = 成本 × markup
+    // 导入定价：售价 = 成本 × markup + 发往 shipTo 的最便宜运费（全站包邮）
     markup: Number(env.CJ_MARKUP ?? 2.5),
+    shipTo: env.CJ_SHIP_TO ?? "US",
   },
 
   mail: {
@@ -39,5 +44,9 @@ export const config = {
   sessionSecret: env.SESSION_SECRET ?? "dev-secret-change-me",
   cronSecret: env.CRON_SECRET ?? "",
 };
+
+export const isFreeShipping = () => config.shippingFlatCents === 0;
+
+export const feeRule = () => ({ percent: config.paymentFeePercent, fixedCents: config.paymentFeeFixedCents });
 
 export const cjConfigured = () => Boolean(config.cj.apiKey);

@@ -33,6 +33,7 @@ model Variant {
   sku         String?
   priceCents  Int // 售价
   costCents   Int? // 采购成本（CJ 导入时自动带上）
+  shippingCostCents Int? // 预估运费成本：全站包邮，运费由我们承担并计入售价
   supplierRef String? // CJ 的 vid
   image       String?
   orderItems  OrderItem[]
