@@ -7,8 +7,11 @@ import { capturePayPalOrder } from "@/lib/paypal";
 
 // 第 2 步：买家在 PayPal 确认付款后，服务端调用 capture 真正扣款
 export async function POST(req: Request) {
-  const { orderId, token } = (await req.json()) as { orderId: number; token: string };
-  const order = await db.order.findFirst({ where: { id: orderId, token } });
+  const body = (await req.json().catch(() => null)) as { orderId?: number; token?: string } | null;
+  if (typeof body?.orderId !== "number" || typeof body.token !== "string") {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+  const order = await db.order.findFirst({ where: { id: body.orderId, token: body.token } });
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
   const redirectUrl = `/orders/${order.id}?token=${order.token}`;

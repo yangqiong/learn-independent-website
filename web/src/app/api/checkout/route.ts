@@ -6,7 +6,7 @@ import { createPayPalOrder } from "@/lib/paypal";
 
 // 第 1 步：创建本地订单（PENDING），PayPal 模式下同时创建 PayPal 订单并返回其 id 给前端按钮
 export async function POST(req: Request) {
-  const parsed = checkoutSchema.safeParse(await req.json());
+  const parsed = checkoutSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }

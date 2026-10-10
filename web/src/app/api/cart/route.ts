@@ -4,9 +4,10 @@ import { shippingFor } from "@/lib/orders";
 
 // 购物车存在浏览器 localStorage，这里按 variantId 返回最新的商品信息和价格
 export async function POST(req: Request) {
-  const { variantIds } = (await req.json()) as { variantIds: string[] };
+  const body = (await req.json().catch(() => null)) as { variantIds?: unknown } | null;
+  const variantIds = Array.isArray(body?.variantIds) ? body.variantIds.map(String) : [];
   const variants = await db.variant.findMany({
-    where: { id: { in: variantIds ?? [] }, product: { active: true } },
+    where: { id: { in: variantIds }, product: { active: true } },
     include: { product: true },
   });
   return NextResponse.json({

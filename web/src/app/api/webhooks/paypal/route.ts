@@ -16,8 +16,8 @@ type WebhookEvent = {
 // 兜底：如果买家付款后关掉了页面，前端没来得及调 capture，PayPal 也会通过 webhook 通知我们
 // 本地调试需要公网地址（如 ngrok / cloudflared），并在 PayPal 开发者后台配置 webhook 拿到 PAYPAL_WEBHOOK_ID
 export async function POST(req: Request) {
-  const event = (await req.json()) as WebhookEvent;
-  if (!(await verifyPayPalWebhook(req.headers, event))) {
+  const event = (await req.json().catch(() => null)) as WebhookEvent | null;
+  if (!event || !(await verifyPayPalWebhook(req.headers, event))) {
     return NextResponse.json({ error: "invalid signature" }, { status: 400 });
   }
   const r = event.resource;
