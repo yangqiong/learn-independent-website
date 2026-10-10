@@ -6,7 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "db:push": "prisma db push",
+    "db:seed": "prisma db seed",
+    "db:setup": "prisma db push && prisma db seed",
+    "db:studio": "prisma studio",
+    "cj:sync": "curl -s -H \"Authorization: Bearer $CRON_SECRET\" http://localhost:3000/api/cron/cj-sync"
   },
   "dependencies": {
     "@paypal/react-paypal-js": "^10.6.0",
@@ -28,5 +34,8 @@
     "tsx": "^4.23.15",
     "typescript": "^5.9.2"
   },
-  "packageManager": "pnpm@11.3.0"
+  "packageManager": "pnpm@11.3.0",
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
 }
