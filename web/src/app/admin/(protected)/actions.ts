@@ -9,6 +9,7 @@ import { config } from "@/lib/config";
 import { db } from "@/lib/db";
 import { markShipped, placeCJOrder, syncCJFulfillment } from "@/lib/fulfillment";
 import { toCents } from "@/lib/money";
+import { suggestPriceCents } from "@/lib/pricing";
 import { addEvent, markRefunded } from "@/lib/orders";
 import { refundPayPalCapture } from "@/lib/paypal";
 
@@ -79,6 +80,7 @@ const productSchema = z.object({
         sku: z.string().optional(),
         price: z.number().positive(),
         cost: z.number().nonnegative().optional(),
+        shipping: z.number().nonnegative().optional(),
       }),
     )
     .min(1),
@@ -97,6 +99,7 @@ export async function saveProduct(_: ProductFormState, formData: FormData): Prom
     sku: v.sku || null,
     priceCents: toCents(v.price),
     costCents: v.cost === undefined ? null : toCents(v.cost),
+    shippingCostCents: v.shipping === undefined ? null : toCents(v.shipping),
   });
 
   try {
@@ -135,6 +138,27 @@ const stripHtml = (html: string) =>
 const slugify = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "product";
 
+// 运费按重量算：同重量的规格只试算一次，取发往目标国家最便宜（或指定）的线路
+async function estimateFreightByWeight(p: cj.CJProduct) {
+  const byWeight = new Map<number, string>();
+  for (const v of p.variants) if (!byWeight.has(v.variantWeight ?? 0)) byWeight.set(v.variantWeight ?? 0, v.vid);
+
+  const result = new Map<number, number>();
+  for (const [weight, vid] of byWeight) {
+    try {
+      const options = await cj.calculateFreight({ endCountryCode: config.cj.shipTo, products: [{ vid, quantity: 1 }] });
+      const picked = config.cj.logisticName
+        ? options.find((o) => o.logisticName === config.cj.logisticName)
+        : options.toSorted((a, b) => a.logisticPrice - b.logisticPrice)[0];
+      if (picked) result.set(weight, toCents(picked.logisticPrice));
+    } catch (e) {
+      // 试算失败不阻断导入：运费留空，商品是下架状态，编辑页会提示补填
+      console.error(`CJ 运费试算失败 vid=${vid}`, e);
+    }
+  }
+  return result;
+}
+
 export async function importCJProduct(formData: FormData) {
   await requireAdmin();
   const pid = String(formData.get("pid"));
@@ -144,8 +168,7 @@ export async function importCJProduct(formData: FormData) {
   if (existing) redirect(`/admin/products/${existing.id}`);
 
   const p = await cj.getProduct(pid);
-  // 售价 = 成本 × 加价倍数，取 .99 结尾
-  const price = (cost: number) => Math.max(99, Math.ceil(cost * markup) * 100 - 1);
+  const freight = await estimateFreightByWeight(p);
   const images = [p.bigImage, ...(p.productImageSet ?? [])].filter((x, i, a) => x && a.indexOf(x) === i).slice(0, 8);
 
   const product = await db.product.create({
@@ -158,14 +181,20 @@ export async function importCJProduct(formData: FormData) {
       supplierRef: pid,
       active: false, // 导入后先下架，检查标题/价格后再上架
       variants: {
-        create: p.variants.map((v) => ({
-          name: v.variantKey || v.variantNameEn || "Default",
-          sku: v.variantSku,
-          costCents: toCents(v.variantSellPrice),
-          priceCents: price(v.variantSellPrice),
-          supplierRef: v.vid,
-          image: v.variantImage,
-        })),
+        create: p.variants.map((v) => {
+          const costCents = toCents(v.variantSellPrice);
+          const shippingCostCents = freight.get(v.variantWeight ?? 0) ?? null;
+          return {
+            name: v.variantKey || v.variantNameEn || "Default",
+            sku: v.variantSku,
+            costCents,
+            shippingCostCents,
+            // 全站包邮：运费计入售价
+            priceCents: suggestPriceCents(costCents, shippingCostCents ?? 0, markup),
+            supplierRef: v.vid,
+            image: v.variantImage,
+          };
+        }),
       },
     },
   });

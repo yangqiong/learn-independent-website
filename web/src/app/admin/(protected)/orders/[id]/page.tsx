@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
-import { cjConfigured } from "@/lib/config";
+import { cjConfigured, feeRule } from "@/lib/config";
 import { db } from "@/lib/db";
 import { countryName, formatMoney } from "@/lib/money";
+import { paymentFeeCents } from "@/lib/pricing";
 import { pushToCJ, refundOrder, shipFulfillment, syncCJ } from "../../actions";
 import { StatusBadge } from "../../StatusBadge";
 
@@ -17,6 +18,10 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
   });
   if (!order) notFound();
   const cost = order.items.reduce((s, i) => s + (i.variant.costCents ?? 0) * i.quantity, 0);
+  // 运费成本按单件估算后累加；实际 CJ 多件合并发货通常会更便宜
+  const shippingCost = order.items.reduce((s, i) => s + (i.variant.shippingCostCents ?? 0) * i.quantity, 0);
+  const fee = order.paymentProvider === "paypal" ? paymentFeeCents(order.totalCents, feeRule()) : 0;
+  const profit = order.totalCents - cost - shippingCost - fee;
   const canRefund = ["PAID", "FULFILLING", "SHIPPED"].includes(order.status);
 
   return (
@@ -47,7 +52,14 @@ export default async function AdminOrderPage({ params }: { params: Promise<{ id:
           <div className="mt-3 space-y-1 border-t border-stone-200 pt-3">
             <div className="flex justify-between"><span>运费</span><span>{formatMoney(order.shippingCents)}</span></div>
             <div className="flex justify-between font-semibold"><span>合计</span><span>{formatMoney(order.totalCents)}</span></div>
-            {cost > 0 && <div className="flex justify-between text-xs text-stone-500"><span>商品成本（不含物流）</span><span>{formatMoney(cost)}</span></div>}
+            <div className="mt-2 space-y-1 border-t border-dashed border-stone-200 pt-2 text-xs text-stone-500">
+              <div className="flex justify-between"><span>商品成本</span><span>−{formatMoney(cost)}</span></div>
+              <div className="flex justify-between"><span>运费成本（估）</span><span>−{formatMoney(shippingCost)}</span></div>
+              <div className="flex justify-between"><span>支付手续费（估）</span><span>−{formatMoney(fee)}</span></div>
+              <div className={`flex justify-between font-medium ${profit < 0 ? "text-red-600" : "text-green-700"}`}>
+                <span>预估毛利</span><span>{formatMoney(profit)}</span>
+              </div>
+            </div>
           </div>
         </section>
 

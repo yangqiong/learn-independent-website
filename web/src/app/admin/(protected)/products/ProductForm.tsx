@@ -1,6 +1,8 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { formatMoney, toCents } from "@/lib/money";
+import { unitProfitCents, type FeeRule } from "@/lib/pricing";
 import { saveProduct, type ProductFormState } from "../actions";
 
 export type ProductFormValue = {
@@ -11,12 +13,20 @@ export type ProductFormValue = {
   images: string[];
   active: boolean;
   supplier: string;
-  variants: { id?: string; name: string; sku: string; price: string; cost: string; supplierRef?: string | null }[];
+  variants: {
+    id?: string;
+    name: string;
+    sku: string;
+    price: string;
+    cost: string;
+    shipping: string;
+    supplierRef?: string | null;
+  }[];
 };
 
 const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-export function ProductForm({ initial }: { initial: ProductFormValue }) {
+export function ProductForm({ initial, fee }: { initial: ProductFormValue; fee: FeeRule }) {
   const [v, setV] = useState(initial);
   const [imagesText, setImagesText] = useState(initial.images.join("\n"));
   const [state, action, pending] = useActionState<ProductFormState, FormData>(saveProduct, {});
@@ -34,6 +44,7 @@ export function ProductForm({ initial }: { initial: ProductFormValue }) {
       sku: x.sku,
       price: Number(x.price),
       cost: x.cost === "" ? undefined : Number(x.cost),
+      shipping: x.shipping === "" ? undefined : Number(x.shipping),
     })),
   });
 
@@ -66,10 +77,10 @@ export function ProductForm({ initial }: { initial: ProductFormValue }) {
       </div>
 
       <div>
-        <label className="label">规格（售价 / 成本单位 USD）</label>
+        <label className="label">规格（单位 USD · 全站包邮，运费成本由我们承担 · 毛利已扣除支付手续费 {fee.percent}% + {formatMoney(fee.fixedCents)}）</label>
         <table className="w-full text-sm">
           <thead className="text-left text-xs text-stone-500">
-            <tr><th>名称</th><th>SKU</th><th>售价</th><th>成本</th>{v.supplier === "CJ" && <th>CJ vid</th>}<th /></tr>
+            <tr><th>名称</th><th>SKU</th><th>售价</th><th>商品成本</th><th>运费成本</th><th>毛利（估）</th>{v.supplier === "CJ" && <th>CJ vid</th>}<th /></tr>
           </thead>
           <tbody>
             {v.variants.map((x, i) => (
@@ -78,6 +89,18 @@ export function ProductForm({ initial }: { initial: ProductFormValue }) {
                 <td className="pr-2"><input className="input" value={x.sku} onChange={(e) => setVariant(i, { sku: e.target.value })} /></td>
                 <td className="pr-2"><input className="input w-24" required type="number" step="0.01" value={x.price} onChange={(e) => setVariant(i, { price: e.target.value })} /></td>
                 <td className="pr-2"><input className="input w-24" type="number" step="0.01" value={x.cost} onChange={(e) => setVariant(i, { cost: e.target.value })} /></td>
+                <td className="pr-2">
+                  <input
+                    className={`input w-24 ${v.supplier === "CJ" && x.shipping === "" ? "border-red-400" : ""}`}
+                    type="number"
+                    step="0.01"
+                    value={x.shipping}
+                    onChange={(e) => setVariant(i, { shipping: e.target.value })}
+                  />
+                </td>
+                <td className="pr-2 whitespace-nowrap">
+                  {x.price !== "" && <Profit cents={unitProfitCents(toCents(x.price), toCents(x.cost || 0), toCents(x.shipping || 0), fee)} price={toCents(x.price)} />}
+                </td>
                 {v.supplier === "CJ" && <td className="pr-2 text-xs text-stone-400">{x.supplierRef?.slice(0, 10)}…</td>}
                 <td>
                   {v.variants.length > 1 && v.supplier !== "CJ" && (
@@ -92,7 +115,7 @@ export function ProductForm({ initial }: { initial: ProductFormValue }) {
           <button
             type="button"
             className="mt-2 text-sm underline"
-            onClick={() => setV({ ...v, variants: [...v.variants, { name: "", sku: "", price: "", cost: "" }] })}
+            onClick={() => setV({ ...v, variants: [...v.variants, { name: "", sku: "", price: "", cost: "", shipping: "" }] })}
           >
             + 添加规格
           </button>
@@ -107,5 +130,14 @@ export function ProductForm({ initial }: { initial: ProductFormValue }) {
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
       <button className="btn" disabled={pending}>{pending ? "保存中…" : "保存"}</button>
     </form>
+  );
+}
+
+function Profit({ cents, price }: { cents: number; price: number }) {
+  const pct = price > 0 ? Math.round((cents / price) * 100) : 0;
+  return (
+    <span className={cents < 0 ? "text-red-600" : cents < price * 0.15 ? "text-amber-600" : "text-green-700"}>
+      {formatMoney(cents)} <span className="text-xs">({pct}%)</span>
+    </span>
   );
 }
