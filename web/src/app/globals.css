@@ -1,14 +1,22 @@
 @import "tailwindcss";
 
+/* Tidy Transit 品牌色：米白底 + 炭黑字 + 陶土橙强调 */
 :root {
-  --background: #fafaf9;
-  --foreground: #1c1917;
+  --background: #f7f4ef;
+  --foreground: #1e1d1b;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --color-cream: #f7f4ef;
+  --color-sand: #efe9df;
+  --color-ink: #1e1d1b;
+  --color-muted: #6e675f;
+  --color-line: #e5ded3;
+  --color-accent: #b8583a;
+  --color-accent-dark: #9a4730;
+  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 body {
@@ -18,14 +26,26 @@ body {
 }
 
 .btn {
-  @apply inline-flex items-center justify-center rounded-md bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700 disabled:opacity-50;
+  @apply inline-flex items-center justify-center rounded-full bg-ink px-6 py-3 text-sm font-medium text-white transition hover:bg-black disabled:opacity-50;
+}
+.btn-accent {
+  @apply inline-flex items-center justify-center rounded-full bg-accent px-6 py-3 text-sm font-medium text-white transition hover:bg-accent-dark disabled:opacity-50;
 }
 .btn-outline {
-  @apply inline-flex items-center justify-center rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-medium hover:bg-stone-100 disabled:opacity-50;
+  @apply inline-flex items-center justify-center rounded-full border border-ink/20 bg-white px-6 py-3 text-sm font-medium transition hover:border-ink disabled:opacity-50;
 }
 .input {
-  @apply w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-900;
+  @apply w-full rounded-lg border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-ink;
 }
 .label {
-  @apply mb-1 block text-xs font-medium text-stone-600;
+  @apply mb-1 block text-xs font-medium text-muted;
+}
+.eyebrow {
+  @apply text-xs font-semibold uppercase tracking-[0.18em] text-accent;
+}
+.h-display {
+  @apply text-4xl font-semibold tracking-tight md:text-6xl;
+}
+.h-section {
+  @apply text-2xl font-semibold tracking-tight md:text-3xl;
 }

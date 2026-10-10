@@ -83,12 +83,12 @@ export function CheckoutForm(props: Props) {
     }
   }
 
-  if (!lines.length) return <p className="py-16 text-center text-stone-500">Your cart is empty.</p>;
+  if (!lines.length) return <p className="px-5 py-24 text-center text-muted">Your cart is empty.</p>;
 
   return (
-    <div className="grid gap-10 md:grid-cols-[1fr_320px]">
+    <div className="mx-auto grid max-w-5xl gap-10 px-5 py-12 md:grid-cols-[1fr_340px]">
       <form ref={formRef} onSubmit={(e) => e.preventDefault()} className="space-y-4">
-        <h1 className="text-2xl font-semibold">Checkout</h1>
+        <h1 className="h-section">Checkout</h1>
         <div>
           <label className="label">Email</label>
           <input className="input" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -115,7 +115,7 @@ export function CheckoutForm(props: Props) {
         </div>
       </form>
 
-      <aside className="h-fit rounded-lg border border-stone-200 bg-white p-5">
+      <aside className="h-fit rounded-2xl border border-line bg-white p-6 md:sticky md:top-24">
         <h2 className="mb-3 font-medium">Order summary</h2>
         <ul className="space-y-2 text-sm">
           {rows.map((r) => (
@@ -125,7 +125,7 @@ export function CheckoutForm(props: Props) {
             </li>
           ))}
         </ul>
-        <div className="mt-4 space-y-1 border-t border-stone-200 pt-3 text-sm">
+        <div className="mt-4 space-y-1 border-t border-line pt-3 text-sm">
           <div className="flex justify-between"><span>Subtotal</span><span>{formatMoney(subtotal)}</span></div>
           <div className="flex justify-between"><span>Shipping</span><span>{shipping ? formatMoney(shipping) : "Free"}</span></div>
           <div className="flex justify-between text-base font-semibold"><span>Total</span><span>{formatMoney(subtotal + shipping)}</span></div>
@@ -161,7 +161,7 @@ export function CheckoutForm(props: Props) {
               <button className="btn w-full" disabled={busy} onClick={mockPay}>
                 {busy ? "Processing…" : `Pay ${formatMoney(subtotal + shipping)} (mock)`}
               </button>
-              <p className="mt-2 text-xs text-stone-500">未配置 PayPal，当前为模拟支付</p>
+              <p className="mt-2 text-xs text-muted">未配置 PayPal，当前为模拟支付</p>
             </>
           )}
           {error && <p className="mt-3 text-sm text-red-600">{error}</p>}

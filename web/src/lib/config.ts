@@ -6,6 +6,10 @@ const paypalConfigured = Boolean(env.PAYPAL_CLIENT_ID && env.PAYPAL_CLIENT_SECRE
 export const config = {
   siteName: env.SITE_NAME ?? "Demo Store",
   supportEmail: env.SUPPORT_EMAIL ?? "support@example.com",
+  tagline: env.SITE_TAGLINE ?? "Pack once. Find everything.",
+  // 对买家展示的时效：处理 1–3 个工作日 + CJ 线路 5–12 天
+  processingTime: env.PROCESSING_TIME ?? "1–3 business days",
+  deliveryEstimate: env.DELIVERY_ESTIMATE ?? "7–15 business days",
   // 允许发货的国家（ISO 两位码，逗号分隔）。定价按 CJ_SHIP_TO 的运费算，开放其他国家前先确认运费
   shipCountries: (env.SHIP_COUNTRIES ?? "US").split(",").map((c) => c.trim().toUpperCase()).filter(Boolean),
   baseUrl: env.BASE_URL ?? "http://localhost:3000",

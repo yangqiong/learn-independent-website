@@ -23,27 +23,27 @@ export function CartView({ freeShipping }: { freeShipping: boolean }) {
 
   if (!lines.length) {
     return (
-      <div className="py-16 text-center">
-        <p className="text-stone-500">Your cart is empty.</p>
+      <div className="px-5 py-24 text-center">
+        <p className="text-muted">Your cart is empty.</p>
         <Link href="/" className="btn mt-4">Continue shopping</Link>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <h1 className="mb-6 text-2xl font-semibold">Cart</h1>
-      {variants === null && <p className="text-sm text-stone-500">Loading…</p>}
-      <ul className="divide-y divide-stone-200 border-y border-stone-200">
+    <div className="mx-auto max-w-2xl px-5 py-12">
+      <h1 className="h-section mb-6">Your cart</h1>
+      {variants === null && <p className="text-sm text-muted">Loading…</p>}
+      <ul className="divide-y divide-line border-y border-line">
         {rows.map((r) => (
           <li key={r.id} className="flex items-center gap-4 py-4">
             {r.image && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={r.image} alt="" className="h-16 w-16 rounded bg-stone-100 object-cover" />
+              <img src={r.image} alt="" className="h-16 w-16 rounded bg-sand object-cover" />
             )}
             <div className="flex-1">
               <Link href={`/products/${r.slug}`} className="text-sm font-medium">{r.title}</Link>
-              <div className="text-xs text-stone-500">{r.name}</div>
+              <div className="text-xs text-muted">{r.name}</div>
             </div>
             <input
               type="number"
@@ -60,7 +60,7 @@ export function CartView({ freeShipping }: { freeShipping: boolean }) {
       <div className="mt-6 flex items-center justify-between">
         <div className="text-sm">
           Subtotal <span className="ml-2 font-semibold">{formatMoney(subtotal)}</span>
-          <div className="text-xs text-stone-500">{freeShipping ? "Free shipping" : "Shipping calculated at checkout"}</div>
+          <div className="text-xs text-muted">{freeShipping ? "Free US shipping included" : "Shipping calculated at checkout"}</div>
         </div>
         <Link href="/checkout" className="btn">Checkout</Link>
       </div>
