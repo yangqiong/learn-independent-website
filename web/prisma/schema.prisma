@@ -1,0 +1,134 @@
+// 数据模型：商品(Product/Variant) → 订单(Order/OrderItem) → 履约(Fulfillment)
+// 本地用 SQLite，上线时把 provider 换成 postgresql 即可
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  title       String
+  description String    @default("")
+  images      String    @default("[]") // JSON 字符串数组
+  active      Boolean   @default(true)
+  // 供应商：MANUAL = 自己发货/手动采购（1688 等），CJ = CJdropshipping 代发
+  supplier    String    @default("MANUAL")
+  supplierRef String? // CJ 的 pid
+  variants    Variant[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Variant {
+  id          String      @id @default(cuid())
+  productId   String
+  product     Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name        String      @default("Default")
+  sku         String?
+  priceCents  Int // 售价
+  costCents   Int? // 采购成本（CJ 导入时自动带上）
+  supplierRef String? // CJ 的 vid
+  image       String?
+  orderItems  OrderItem[]
+}
+
+model Order {
+  id           Int           @id @default(autoincrement())
+  token        String        @unique // 买家凭此查看订单，无需注册
+  email        String
+  // PENDING 待支付 / PAID 已支付 / FULFILLING 履约中 / SHIPPED 已全部发货 / REFUNDED 已退款 / CANCELLED
+  status       String        @default("PENDING")
+  currency     String        @default("USD")
+  subtotalCents Int
+  shippingCents Int
+  totalCents   Int
+
+  shipName     String
+  shipPhone    String        @default("")
+  shipLine1    String
+  shipLine2    String        @default("")
+  shipCity     String
+  shipState    String        @default("")
+  shipZip      String
+  shipCountry  String // ISO 两位国家码，如 US
+
+  paymentProvider String? // paypal / mock
+  paymentRef      String? // PayPal order id
+  captureRef      String? // PayPal capture id（退款要用）
+  paidAt          DateTime?
+
+  items        OrderItem[]
+  fulfillments Fulfillment[]
+  events       OrderEvent[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model OrderItem {
+  id            String       @id @default(cuid())
+  orderId       Int
+  order         Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variantId     String
+  variant       Variant      @relation(fields: [variantId], references: [id])
+  title         String // 下单时快照，商品后续改名不影响历史订单
+  variantName   String
+  unitCents     Int
+  quantity      Int
+  supplier      String
+  fulfillmentId String?
+  fulfillment   Fulfillment? @relation(fields: [fulfillmentId], references: [id])
+}
+
+// 一个订单按供应商拆成多个履约单：CJ 的商品走 CJ，自发货的商品走手动
+model Fulfillment {
+  id             String      @id @default(cuid())
+  orderId        Int
+  order          Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  supplier       String
+  // PENDING 待处理 / PLACED 已向供应商下单 / SHIPPED 已发货 / FAILED 下单失败
+  status         String      @default("PENDING")
+  supplierOrderId String?
+  logisticName   String?
+  carrier        String?
+  trackingNumber String?
+  trackingUrl    String?
+  error          String?
+  items          OrderItem[]
+  shippedAt      DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
+// 订单时间线，方便看清每一步发生了什么
+model OrderEvent {
+  id        String   @id @default(cuid())
+  orderId   Int
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  type      String
+  message   String
+  createdAt DateTime @default(now())
+}
+
+// 开发期“发件箱”：所有邮件都记录在这里，配置 RESEND_API_KEY 后才会真正发出
+model EmailLog {
+  id        String   @id @default(cuid())
+  to        String
+  subject   String
+  html      String
+  status    String   @default("LOGGED") // LOGGED / SENT / FAILED
+  error     String?
+  createdAt DateTime @default(now())
+}
+
+// 简单 KV，用于缓存 CJ access token（CJ 限制 5 分钟才能取一次）
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
