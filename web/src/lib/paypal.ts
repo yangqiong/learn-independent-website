@@ -6,10 +6,22 @@ const base = () => (config.paypal.live ? "https://api-m.paypal.com" : "https://a
 
 let cachedToken: { value: string; expiresAt: number } | null = null;
 
+// 国内访问 PayPal 偶尔会 TLS 握手失败：只对网络错误重试（带 PayPal-Request-Id 的请求重试是安全的）
+async function fetchWithRetry(url: string, init: RequestInit, attempts = 3): Promise<Response> {
+  for (let i = 1; ; i++) {
+    try {
+      return await fetch(url, init);
+    } catch (e) {
+      if (i >= attempts) throw e;
+      await new Promise((r) => setTimeout(r, 500 * i));
+    }
+  }
+}
+
 async function accessToken() {
   if (cachedToken && cachedToken.expiresAt > Date.now() + 60_000) return cachedToken.value;
   const auth = Buffer.from(`${config.paypal.clientId}:${config.paypal.clientSecret}`).toString("base64");
-  const res = await fetch(`${base()}/v1/oauth2/token`, {
+  const res = await fetchWithRetry(`${base()}/v1/oauth2/token`, {
     method: "POST",
     headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/x-www-form-urlencoded" },
     body: "grant_type=client_credentials",
@@ -21,7 +33,7 @@ async function accessToken() {
 }
 
 async function paypalFetch<T>(path: string, init: RequestInit & { requestId?: string } = {}): Promise<T> {
-  const res = await fetch(`${base()}${path}`, {
+  const res = await fetchWithRetry(`${base()}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${await accessToken()}`,
@@ -36,6 +48,7 @@ async function paypalFetch<T>(path: string, init: RequestInit & { requestId?: st
 
 type OrderForPayPal = {
   id: number;
+  token: string;
   currency: string;
   subtotalCents: number;
   shippingCents: number;
@@ -47,7 +60,8 @@ export async function createPayPalOrder(order: OrderForPayPal) {
   const currency_code = order.currency;
   const res = await paypalFetch<{ id: string }>("/v2/checkout/orders", {
     method: "POST",
-    requestId: `create-${order.id}`,
+    // 幂等键必须全局唯一：用自增 id 的话，清空数据库或多环境共用一个 PayPal 账号时会撞上旧订单
+    requestId: `create-${order.token}`,
     body: JSON.stringify({
       intent: "CAPTURE",
       purchase_units: [

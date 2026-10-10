@@ -3,7 +3,7 @@ import { config } from "@/lib/config";
 import { db } from "@/lib/db";
 import { toAmount } from "@/lib/money";
 import { addEvent, markPaid } from "@/lib/orders";
-import { capturePayPalOrder } from "@/lib/paypal";
+import { capturePayPalOrder, refundPayPalCapture } from "@/lib/paypal";
 
 // 第 2 步：买家在 PayPal 确认付款后，服务端调用 capture 真正扣款
 export async function POST(req: Request) {
@@ -27,9 +27,19 @@ export async function POST(req: Request) {
       if (result.status !== "COMPLETED" || capture?.status !== "COMPLETED") {
         throw new Error(`Payment not completed (${capture?.status ?? result.status})`);
       }
-      if (capture.amount.value !== toAmount(order.totalCents) || capture.amount.currency_code !== order.currency) {
-        await addEvent(order.id, "AMOUNT_MISMATCH", `金额不一致：${capture.amount.value} ${capture.amount.currency_code}`);
-        throw new Error("Amount mismatch");
+      if (
+        unit.custom_id !== String(order.id) ||
+        capture.amount.value !== toAmount(order.totalCents) ||
+        capture.amount.currency_code !== order.currency
+      ) {
+        // 钱已经扣了但对不上订单：自动退回，订单保持待支付，买家可以重新付款
+        const refund = await refundPayPalCapture(capture.id).catch((e) => ({ id: "-", status: `FAILED ${e}` }));
+        await addEvent(
+          order.id,
+          "AMOUNT_MISMATCH",
+          `扣款与订单不符（${capture.amount.value} ${capture.amount.currency_code}，custom_id ${unit.custom_id}），已自动退款 ${refund.id} ${refund.status}`,
+        );
+        throw new Error("Payment did not match the order and was refunded. Please try again.");
       }
       await markPaid(order.id, capture.id);
     } else {
