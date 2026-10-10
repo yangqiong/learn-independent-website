@@ -2,12 +2,12 @@ import Link from "next/link";
 import { kitContents, minPrice, productImages, type ProductWithVariants } from "@/lib/catalog";
 import { formatMoney } from "@/lib/money";
 
-export function ProductCard({ product, large = false }: { product: ProductWithVariants; large?: boolean }) {
+export function ProductCard({ product }: { product: ProductWithVariants }) {
   const image = productImages(product)[0];
   const contents = kitContents(product);
   return (
     <Link href={`/products/${product.slug}`} className="group block">
-      <div className={`overflow-hidden rounded-2xl bg-white ${large ? "aspect-[4/5]" : "aspect-square"}`}>
+      <div className="aspect-square overflow-hidden rounded-2xl bg-white">
         {image && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={image} alt={product.title} className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" />

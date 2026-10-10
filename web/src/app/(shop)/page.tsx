@@ -86,8 +86,9 @@ export default async function HomePage() {
             </div>
             <p className="hidden max-w-xs text-sm text-muted md:block">Each kit is a curated set of pieces chosen to work together — no guessing what fits.</p>
           </div>
-          <div className="grid gap-8 md:grid-cols-3">
-            {kits.map((p) => <ProductCard key={p.id} product={p} large />)}
+          {/* 套装数量少时用两列，避免空出一列 */}
+          <div className={`grid gap-8 ${kits.length % 3 === 0 ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
+            {kits.map((p) => <ProductCard key={p.id} product={p} />)}
           </div>
         </section>
       )}
