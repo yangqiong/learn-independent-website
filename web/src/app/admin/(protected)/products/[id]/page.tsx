@@ -30,6 +30,8 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
           slug: p.slug,
           description: p.description,
           images: JSON.parse(p.images) as string[],
+          tags: JSON.parse(p.tags) as string[],
+          highlights: JSON.parse(p.highlights) as string[],
           active: p.active,
           supplier: p.supplier,
           variants: p.variants.map((v) => ({
@@ -40,6 +42,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
             cost: dollars(v.costCents),
             shipping: dollars(v.shippingCostCents),
             supplierRef: v.supplierRef,
+            components: v.components,
           })),
         }}
       />

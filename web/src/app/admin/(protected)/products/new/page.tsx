@@ -13,6 +13,8 @@ export default function NewProductPage() {
           slug: "",
           description: "",
           images: [],
+          tags: [],
+          highlights: [],
           active: true,
           supplier: "MANUAL",
           variants: [{ name: "Default", sku: "", price: "", cost: "", shipping: "" }],

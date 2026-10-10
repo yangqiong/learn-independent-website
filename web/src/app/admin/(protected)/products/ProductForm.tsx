@@ -11,6 +11,8 @@ export type ProductFormValue = {
   slug: string;
   description: string;
   images: string[];
+  tags: string[];
+  highlights: string[];
   active: boolean;
   supplier: string;
   variants: {
@@ -21,6 +23,7 @@ export type ProductFormValue = {
     cost: string;
     shipping: string;
     supplierRef?: string | null;
+    components?: string | null;
   }[];
 };
 
@@ -29,6 +32,9 @@ const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").repla
 export function ProductForm({ initial, fee }: { initial: ProductFormValue; fee: FeeRule }) {
   const [v, setV] = useState(initial);
   const [imagesText, setImagesText] = useState(initial.images.join("\n"));
+  const [tagsText, setTagsText] = useState(initial.tags.join(", "));
+  const [highlightsText, setHighlightsText] = useState(initial.highlights.join("\n"));
+  const lines = (t: string) => t.split("\n").map((x) => x.trim()).filter(Boolean);
   const [state, action, pending] = useActionState<ProductFormState, FormData>(saveProduct, {});
 
   const payload = JSON.stringify({
@@ -37,7 +43,9 @@ export function ProductForm({ initial, fee }: { initial: ProductFormValue; fee: 
     slug: v.slug,
     description: v.description,
     active: v.active,
-    images: imagesText.split("\n").map((s) => s.trim()).filter(Boolean),
+    images: lines(imagesText),
+    tags: tagsText.split(",").map((x) => x.trim()).filter(Boolean),
+    highlights: lines(highlightsText),
     variants: v.variants.map((x) => ({
       id: x.id,
       name: x.name,
@@ -77,10 +85,19 @@ export function ProductForm({ initial, fee }: { initial: ProductFormValue; fee: 
       </div>
 
       <div>
+        <label className="label">卖点（每行一条，显示在商品页“购买”按钮下方）</label>
+        <textarea className="input h-28" value={highlightsText} onChange={(e) => setHighlightsText(e.target.value)} />
+      </div>
+      <div>
+        <label className="label">标签（逗号分隔）：kit = 首页套装区，tech = 数码收纳区，trip:business / trip:carry-on / trip:weekend = 按出行场景</label>
+        <input className="input" value={tagsText} onChange={(e) => setTagsText(e.target.value)} />
+      </div>
+
+      <div>
         <label className="label">规格（单位 USD · 全站包邮，运费成本由我们承担 · 毛利已扣除支付手续费 {fee.percent}% + {formatMoney(fee.fixedCents)}）</label>
         <table className="w-full text-sm">
           <thead className="text-left text-xs text-stone-500">
-            <tr><th>名称</th><th>SKU</th><th>售价</th><th>商品成本</th><th>运费成本</th><th>毛利（估）</th>{v.supplier === "CJ" && <th>CJ vid</th>}<th /></tr>
+            <tr><th>名称</th><th>SKU</th><th>售价</th><th>商品成本</th><th>运费成本</th><th>毛利（估）</th>{v.supplier === "CJ" && <th>CJ 商品</th>}<th /></tr>
           </thead>
           <tbody>
             {v.variants.map((x, i) => (
@@ -101,7 +118,13 @@ export function ProductForm({ initial, fee }: { initial: ProductFormValue; fee: 
                 <td className="pr-2 whitespace-nowrap">
                   {x.price !== "" && <Profit cents={unitProfitCents(toCents(x.price), toCents(x.cost || 0), toCents(x.shipping || 0), fee)} price={toCents(x.price)} />}
                 </td>
-                {v.supplier === "CJ" && <td className="pr-2 text-xs text-stone-400">{x.supplierRef?.slice(0, 10)}…</td>}
+                {v.supplier === "CJ" && (
+                  <td className="pr-2 text-xs text-stone-400">
+                    {x.components
+                      ? `套装：${(JSON.parse(x.components) as { name?: string; quantity: number }[]).map((c) => `${c.name ?? "?"}×${c.quantity}`).join(" + ")}`
+                      : `${x.supplierRef?.slice(0, 10)}…`}
+                  </td>
+                )}
                 <td>
                   {v.variants.length > 1 && v.supplier !== "CJ" && (
                     <button type="button" className="text-xs text-red-600" onClick={() => setV({ ...v, variants: v.variants.filter((_, j) => j !== i) })}>删除</button>

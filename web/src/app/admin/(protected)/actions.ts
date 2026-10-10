@@ -69,7 +69,9 @@ const productSchema = z.object({
   title: z.string().min(1),
   slug: z.string().regex(/^[a-z0-9-]+$/, "slug 只能包含小写字母、数字和 -"),
   description: z.string(),
-  images: z.array(z.string().url()),
+  images: z.array(z.string().refine((u) => u.startsWith("/") || /^https?:\/\//.test(u), "图片需为 URL 或 / 开头的站内路径")),
+  tags: z.array(z.string()),
+  highlights: z.array(z.string()),
   active: z.boolean(),
   variants: z
     .array(
@@ -92,7 +94,15 @@ export async function saveProduct(_: ProductFormState, formData: FormData): Prom
   const parsed = productSchema.safeParse(JSON.parse(String(formData.get("payload"))));
   if (!parsed.success) return { error: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
   const p = parsed.data;
-  const data = { title: p.title, slug: p.slug, description: p.description, images: JSON.stringify(p.images), active: p.active };
+  const data = {
+    title: p.title,
+    slug: p.slug,
+    description: p.description,
+    images: JSON.stringify(p.images),
+    tags: JSON.stringify(p.tags),
+    highlights: JSON.stringify(p.highlights),
+    active: p.active,
+  };
   const variantData = (v: (typeof p.variants)[number]) => ({
     name: v.name,
     sku: v.sku || null,
