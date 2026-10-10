@@ -29,11 +29,11 @@ type TokenData = {
 
 async function requestToken(path: string, body: object): Promise<StoredToken> {
   await throttle();
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetchWithRetry(`${BASE}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  });
+  }, 3);
   const json = (await res.json()) as CJResponse<TokenData>;
   if (!json.result) throw new Error(`CJ 获取 token 失败：${json.code} ${json.message}`);
   const d = json.data;
@@ -68,16 +68,29 @@ async function getToken() {
 
 const RATE_LIMITED = 1600200;
 
-async function cjFetch<T>(path: string, init: RequestInit = {}, retried = false): Promise<T> {
+// 国内网络访问 CJ 偶尔 TLS 握手失败：查询类请求自动重试；下单请求不重试，避免重复下单
+async function fetchWithRetry(url: string, init: RequestInit, attempts: number) {
+  for (let i = 1; ; i++) {
+    try {
+      return await fetch(url, init);
+    } catch (e) {
+      if (i >= attempts) throw e;
+      await new Promise((r) => setTimeout(r, 1000 * i));
+    }
+  }
+}
+
+async function cjFetch<T>(path: string, init: RequestInit = {}, retried = false, networkRetry = true): Promise<T> {
   const token = await getToken();
   await throttle();
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: { "CJ-Access-Token": token, "Content-Type": "application/json" },
-  });
+  const res = await fetchWithRetry(
+    `${BASE}${path}`,
+    { ...init, headers: { "CJ-Access-Token": token, "Content-Type": "application/json" } },
+    networkRetry ? 3 : 1,
+  );
   const json = (await res.json()) as CJResponse<T>;
   // 多个进程同时调用（如 dev 服务器 + 脚本）仍可能被限流，重试一次
-  if (json.code === RATE_LIMITED && !retried) return cjFetch(path, init, true);
+  if (json.code === RATE_LIMITED && !retried) return cjFetch(path, init, true, networkRetry);
   if (!json.result) throw new Error(`CJ ${path} 失败：${json.code} ${json.message}`);
   return json.data;
 }
@@ -145,10 +158,12 @@ export type CJCreateOrderInput = {
 
 // V3 只创建订单不扣款：需要在 CJ 后台付款（或充值余额后调用 payBalance）CJ 才会发货
 export const createOrder = (input: CJCreateOrderInput) =>
-  cjFetch<{ orderId: string; orderStatus?: string; orderAmount?: number }>("/shopping/order/createOrderV3", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  cjFetch<{ orderId: string; orderStatus?: string; orderAmount?: number }>(
+    "/shopping/order/createOrderV3",
+    { method: "POST", body: JSON.stringify(input) },
+    false,
+    false,
+  );
 
 export type CJOrderDetail = {
   orderId: string;
