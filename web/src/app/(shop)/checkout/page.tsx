@@ -7,6 +7,7 @@ export default function CheckoutPage() {
   return (
     <CheckoutForm
       provider={config.paymentProvider}
+      countries={config.shipCountries}
       paypalClientId={config.paypal.clientId}
       currency={config.currency}
       shippingFlatCents={config.shippingFlatCents}

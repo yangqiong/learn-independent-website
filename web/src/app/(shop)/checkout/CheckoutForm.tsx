@@ -4,20 +4,16 @@ import { PayPalButtons, PayPalScriptProvider } from "@paypal/react-paypal-js";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { cart, fetchCartVariants, useCart, type CartVariant } from "@/lib/cart-client";
-import { formatMoney } from "@/lib/money";
+import { countryName, formatMoney } from "@/lib/money";
 
 type Props = {
   provider: "paypal" | "mock";
+  countries: string[];
   paypalClientId: string;
   currency: string;
   shippingFlatCents: number;
   freeShippingOverCents: number;
 };
-
-const COUNTRIES = [
-  ["US", "United States"], ["GB", "United Kingdom"], ["CA", "Canada"], ["AU", "Australia"],
-  ["DE", "Germany"], ["FR", "France"], ["JP", "Japan"], ["SG", "Singapore"],
-];
 
 const FIELDS = [
   ["name", "Full name"], ["phone", "Phone"], ["line1", "Address"], ["line2", "Apartment, suite (optional)"],
@@ -29,7 +25,7 @@ export function CheckoutForm(props: Props) {
   const lines = useCart();
   const [variants, setVariants] = useState<CartVariant[]>([]);
   const [email, setEmail] = useState("");
-  const [address, setAddress] = useState({ name: "", phone: "", line1: "", line2: "", city: "", state: "", zip: "", country: "US" });
+  const [address, setAddress] = useState({ name: "", phone: "", line1: "", line2: "", city: "", state: "", zip: "", country: props.countries[0] ?? "US" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const orderRef = useRef<{ orderId: number; token: string } | null>(null);
@@ -101,7 +97,7 @@ export function CheckoutForm(props: Props) {
         <div>
           <label className="label">Country</label>
           <select className="input" value={address.country} onChange={(e) => setAddress({ ...address, country: e.target.value })}>
-            {COUNTRIES.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+            {props.countries.map((code) => <option key={code} value={code}>{countryName(code)}</option>)}
           </select>
         </div>
         <div className="grid grid-cols-2 gap-3">

@@ -5,6 +5,9 @@ const paypalConfigured = Boolean(env.PAYPAL_CLIENT_ID && env.PAYPAL_CLIENT_SECRE
 
 export const config = {
   siteName: env.SITE_NAME ?? "Demo Store",
+  supportEmail: env.SUPPORT_EMAIL ?? "support@example.com",
+  // 允许发货的国家（ISO 两位码，逗号分隔）。定价按 CJ_SHIP_TO 的运费算，开放其他国家前先确认运费
+  shipCountries: (env.SHIP_COUNTRIES ?? "US").split(",").map((c) => c.trim().toUpperCase()).filter(Boolean),
   baseUrl: env.BASE_URL ?? "http://localhost:3000",
   currency: "USD",
   // 默认全站包邮：运费在导入定价时已计入售价。想收运费可设 SHIPPING_FLAT_CENTS

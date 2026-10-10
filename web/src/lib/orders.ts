@@ -18,7 +18,11 @@ export const checkoutSchema = z.object({
     city: z.string().min(1),
     state: z.string().default(""),
     zip: z.string().min(1),
-    country: z.string().length(2),
+    country: z
+      .string()
+      .length(2)
+      .transform((c) => c.toUpperCase())
+      .refine((c) => config.shipCountries.includes(c), "We don't ship to this country yet"),
   }),
 });
 
