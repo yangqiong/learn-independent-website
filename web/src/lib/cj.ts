@@ -5,6 +5,19 @@ import { db } from "./db";
 const BASE = "https://developers.cjdropshipping.com/api2.0/v1";
 const TOKEN_KEY = "cj_token";
 
+// CJ 限制 QPS 为 1 次/秒：所有请求串行排队，间隔 1.1 秒（单进程内有效）
+let lastCall = 0;
+let queue: Promise<unknown> = Promise.resolve();
+function throttle() {
+  const turn = queue.then(async () => {
+    const wait = lastCall + 1100 - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    lastCall = Date.now();
+  });
+  queue = turn;
+  return turn;
+}
+
 type CJResponse<T> = { code: number; result: boolean; message: string; data: T };
 type StoredToken = { accessToken: string; expiresAt: number; refreshToken: string; refreshExpiresAt: number };
 type TokenData = {
@@ -15,6 +28,7 @@ type TokenData = {
 };
 
 async function requestToken(path: string, body: object): Promise<StoredToken> {
+  await throttle();
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -52,12 +66,18 @@ async function getToken() {
   return fresh.accessToken;
 }
 
-async function cjFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+const RATE_LIMITED = 1600200;
+
+async function cjFetch<T>(path: string, init: RequestInit = {}, retried = false): Promise<T> {
+  const token = await getToken();
+  await throttle();
   const res = await fetch(`${BASE}${path}`, {
     ...init,
-    headers: { "CJ-Access-Token": await getToken(), "Content-Type": "application/json" },
+    headers: { "CJ-Access-Token": token, "Content-Type": "application/json" },
   });
   const json = (await res.json()) as CJResponse<T>;
+  // 多个进程同时调用（如 dev 服务器 + 脚本）仍可能被限流，重试一次
+  if (json.code === RATE_LIMITED && !retried) return cjFetch(path, init, true);
   if (!json.result) throw new Error(`CJ ${path} 失败：${json.code} ${json.message}`);
   return json.data;
 }
